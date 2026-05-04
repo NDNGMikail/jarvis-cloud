@@ -1,26 +1,25 @@
-import customtkinter as ctk
+from flask import Flask
+import threading
 import os
 
-# Render gibi ekranı olmayan (headless) sunucularda hata vermemesi için
-if os.environ.get('DISPLAY','') == '':
-    print('Ekran bulunamadı, bulut modu aktif.')
-    os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+app = Flask(__name__)
 
-def baslat():
-    # Pencere ayarları
-    app = ctk.CTk()
-    app.geometry("400x240")
-    app.title("Jarvis Cloud")
+@app.route('/')
+def home():
+    return "Jarvis Sistemi Aktif, Mikail! Bulut üzerinden çalışıyorum."
 
-    # Arayüz elemanları - İsmin burada güncellendi Mikail!
-    label = ctk.CTkLabel(app, text="Jarvis Bulut Sistemine Hoş Geldin, Mikail!", font=("Arial", 16))
-    label.pack(pady=20)
-
-    btn = ctk.CTkButton(app, text="Sistemi Kontrol Et", command=lambda: print("Sistem Aktif!"))
-    btn.pack(pady=10)
-
-    print("Jarvis başarıyla başlatıldı...")
-    app.mainloop()
+def jarvis_logic():
+    print("Jarvis arka planda çalışmaya başladı...")
+    # Buraya daha sonra AI komutlarını ekleyeceğiz.
+    while True:
+        pass
 
 if __name__ == "__main__":
-    baslat()
+    # Jarvis'i ayrı bir kolda (thread) çalıştırıyoruz
+    t = threading.Thread(target=jarvis_logic)
+    t.daemon = True
+    t.start()
+    
+    # Render'ın beklediği web sunucusunu başlatıyoruz
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
