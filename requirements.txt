@@ -1,3 +1,2 @@
-customtkinter
-darkdetect
-packaging
+flask
+gunicorn
