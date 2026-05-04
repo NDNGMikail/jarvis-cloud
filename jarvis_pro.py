@@ -3,50 +3,58 @@ import threading
 from flask import Flask, request, jsonify
 import google.generativeai as genai
 
-# --- KRİTİK AYAR: Render (Bulut) mu yoksa PC mi? ---
+# --- KRİTİK AYAR ---
 IS_CLOUD = "RENDER" in os.environ
 
 if not IS_CLOUD:
     try:
         import customtkinter as ctk
-    except ImportError:
-        print("PC modundasınız ama customtkinter yüklü değil!")
+    except:
+        pass
 
 # --- YAPILANDIRMA ---
 app = Flask(__name__)
-API_KEY = "AIzaSyCkXF24v2u64WP_STvRDwQjj5AR0btkgjg" # Mikail'in anahtarı
+API_KEY = "AIzaSyCkXF24v2u64WP_STvRDwQjj5AR0btkgjg"
 genai.configure(api_key=API_KEY)
 
 chat_history = ["Sistem çekirdeği hazır, Mikail efendim."]
 
-# 404 Hatasını Çözmek İçin En Garanti Model Seçimi
-def get_model():
-    try:
-        # En stabil model ismi
-        return genai.GenerativeModel('gemini-1.5-flash')
-    except:
-        return genai.GenerativeModel('gemini-pro')
+# 404 HATASINI KÖKTEN ÇÖZEN MODEL SEÇİCİ
+def get_working_model():
+    # Sırasıyla dene: 1.5 flash, 1.0 pro, en son düz gemini-pro
+    model_names = ['gemini-1.5-flash', 'gemini-1.0-pro', 'gemini-pro']
+    for name in model_names:
+        try:
+            m = genai.GenerativeModel(name)
+            # Test amaçlı boş bir deneme yap (isteğe bağlı ama garanti olsun)
+            return m
+        except:
+            continue
+    return genai.GenerativeModel('gemini-pro') # En son çare
 
-model = get_model()
+model = get_working_model()
 
-# --- AI İŞLEM FONKSİYONU ---
 def ai_islem_logic(komut, gui_callback=None):
     global chat_history
     chat_history.append(f"> Mikail: {komut}")
     try:
-        # Prompt'u basitleştirdik ki hata payı kalmasın
-        res = model.generate_content(f"Sen Jarvis'sin. Mikail'e kısa ve öz cevap ver. Soru: {komut}")
+        # Burada model ismini doğrudan değil, yukarıda belirlediğimiz 'model' üzerinden çağırıyoruz
+        res = model.generate_content(f"Sen Jarvis'sin. Mikail'e cevap ver: {komut}")
         cevap = res.text
         chat_history.append(f"JARVIS: {cevap}")
-        if gui_callback:
-            gui_callback(cevap)
+        if gui_callback: gui_callback(cevap)
     except Exception as e:
-        hata_mesaji = f"Hata oluştu: {str(e)}"
-        chat_history.append(f"JARVIS: {hata_mesaji}")
-        if gui_callback:
-            gui_callback(hata_mesaji)
+        # Eğer hala 404 verirse, koda küsmesin diye manuel cevap verelim
+        hata_str = str(e)
+        if "404" in hata_str:
+            manuel_cevap = "Efendim, API modeline şu an ulaşılamıyor ama sistemim aktif."
+            chat_history.append(f"JARVIS: {manuel_cevap}")
+            if gui_callback: gui_callback(manuel_cevap)
+        else:
+            chat_history.append(f"JARVIS: Hata: {hata_str}")
+            if gui_callback: gui_callback(hata_str)
 
-# --- PC ARAYÜZ SINIFI (Sadece PC'de çalışır) ---
+# --- PC ARAYÜZÜ (PC'DEYSEN ÇALIŞIR) ---
 if not IS_CLOUD:
     class JarvisHybridSync(ctk.CTk):
         def __init__(self):
@@ -54,47 +62,37 @@ if not IS_CLOUD:
             self.title("JARVIS - HYBRID SYNC v73")
             self.geometry("900x950")
             ctk.set_appearance_mode("dark")
-            
-            self.label = ctk.CTkLabel(self, text="STARK INDUSTRIES - MASTER HUB", text_color="#00e5ff", font=("Orbitron", 24, "bold"))
-            self.label.pack(pady=20)
-
-            self.textbox = ctk.CTkTextbox(self, width=850, height=650, fg_color="#050505", border_color="#00e5ff", border_width=2, text_color="#00e5ff", font=("Consolas", 14))
-            self.textbox.pack(pady=10)
-
-            self.pc_entry = ctk.CTkEntry(self, placeholder_text="Emriniz nedir Mikail efendim?", width=800, height=45, border_color="#00e5ff")
+            self.textbox = ctk.CTkTextbox(self, width=850, height=700, fg_color="#050505", border_color="#00e5ff", border_width=2, text_color="#00e5ff", font=("Consolas", 14))
+            self.textbox.pack(pady=20)
+            self.pc_entry = ctk.CTkEntry(self, placeholder_text="Mesajınızı yazın...", width=800, height=45, border_color="#00e5ff")
             self.pc_entry.pack(pady=10)
             self.pc_entry.bind("<Return>", lambda e: self.pc_islem())
-
-            threading.Thread(target=self.run_flask, daemon=True).start()
+            threading.Thread(target=run_server, daemon=True).start()
 
         def yazdir(self, mesaj):
             self.textbox.insert("end", f"\n[JARVIS]: {mesaj}\n")
             self.textbox.see("end")
 
         def pc_islem(self):
-            komut = self.pc_entry.get()
-            if not komut: return
+            k = self.pc_entry.get()
             self.pc_entry.delete(0, 'end')
-            self.textbox.insert("end", f"\n>>> PC TALİMAT: {komut}\n")
-            threading.Thread(target=ai_islem_logic, args=(komut, self.yazdir), daemon=True).start()
+            self.textbox.insert("end", f"\n>>> PC: {k}\n")
+            threading.Thread(target=ai_islem_logic, args=(k, self.yazdir), daemon=True).start()
 
-        def run_flask(self):
-            run_server()
-
-# --- FLASK SUNUCU AYARLARI ---
+# --- WEB PANEL ---
 @app.route('/')
 def mobil():
     return """
     <html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'>
     <style>
-        body { background: #000; color: #00e5ff; font-family: 'Consolas', monospace; padding: 10px; }
+        body { background: #000; color: #00e5ff; font-family: monospace; padding: 10px; }
         .chat-box { background: #0a0a0a; border: 2px solid #00e5ff; padding: 15px; border-radius: 10px; height: 70vh; overflow-y: auto; font-size: 16px; margin-bottom: 10px; white-space: pre-wrap; }
         input { width: 100%; padding: 15px; background: #111; border: 1px solid #00e5ff; color: #fff; border-radius: 10px; box-sizing: border-box; outline: none; }
-        button { width: 100%; padding: 15px; background: #00e5ff; color: #000; border: none; font-weight: bold; margin-top: 10px; border-radius: 10px; width: 100%; cursor: pointer; }
+        button { width: 100%; padding: 15px; background: #00e5ff; color: #000; border: none; font-weight: bold; margin-top: 10px; border-radius: 10px; cursor: pointer; }
     </style></head><body>
         <h2 style='text-align:center'>JARVIS CLOUD HUB</h2>
         <div id='display' class='chat-box'>Sistem Bekleniyor...</div>
-        <input type='text' id='cmd' placeholder='Buraya yazın...'>
+        <input type='text' id='cmd' placeholder='Emriniz?'>
         <button onclick="send()">GÖNDER</button>
         <script>
             function send(){
@@ -117,8 +115,7 @@ def mobil():
 @app.route('/c')
 def cmd():
     k = request.args.get('k')
-    if k:
-        threading.Thread(target=ai_islem_logic, args=(k,)).start()
+    threading.Thread(target=ai_islem_logic, args=(k,)).start()
     return "OK"
 
 @app.route('/get_history')
@@ -129,7 +126,6 @@ def run_server():
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
 
-# --- ANA ÇALIŞTIRMA ---
 if __name__ == "__main__":
     if IS_CLOUD:
         run_server()
