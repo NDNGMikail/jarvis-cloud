@@ -1,44 +1,95 @@
+import os
 import threading
 from flask import Flask, request, jsonify
 import google.generativeai as genai
-import os
+
+# --- KRİTİK AYAR: Render (Bulut) mu yoksa PC mi? ---
+# Render ortamında 'RENDER' değişkeni otomatik olarak bulunur.
+IS_CLOUD = "RENDER" in os.environ
+
+if not IS_CLOUD:
+    import customtkinter as ctk
 
 # --- YAPILANDIRMA ---
 app = Flask(__name__)
-API_KEY = "AIzaSyCkXF24v2u64WP_STvRDwQjj5AR0btkgjg" # Senin anahtarın
+API_KEY = "AIzaSyCkXF24v2u64WP_STvRDwQjj5AR0btkgjg" # Mikail'in anahtarı
 genai.configure(api_key=API_KEY)
 
-# Bulutta geçmişi tutmak için
-chat_history = ["Sistem çekirdeği bulutta hazır, Mikail efendim."]
+chat_history = ["Sistem çekirdeği hazır, Mikail efendim."]
 
-# Model ayarları
+# Model ismini 'latest' yaparak 404 hatasını çözüyoruz
 try:
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
 except:
     model = genai.GenerativeModel('gemini-pro')
 
+# --- AI İŞLEM FONKSİYONU ---
+def ai_islem_logic(komut, gui_callback=None):
+    global chat_history
+    chat_history.append(f"> Mikail: {komut}")
+    try:
+        res = model.generate_content(f"Sen Jarvis'sin. Mikail'e cevap ver. Soru: {komut}")
+        cevap = res.text
+        chat_history.append(f"JARVIS: {cevap}")
+        if gui_callback:
+            gui_callback(cevap)
+    except Exception as e:
+        hata_mesaji = f"Hata: {str(e)}"
+        chat_history.append(f"JARVIS: {hata_mesaji}")
+        if gui_callback:
+            gui_callback(hata_mesaji)
+
+# --- PC ARAYÜZ SINIFI (Sadece PC'de çalışır) ---
+if not IS_CLOUD:
+    class JarvisHybridSync(ctk.CTk):
+        def __init__(self):
+            super().__init__()
+            self.title("JARVIS - HYBRID SYNC v73")
+            self.geometry("900x950")
+            ctk.set_appearance_mode("dark")
+            
+            self.label = ctk.CTkLabel(self, text="STARK INDUSTRIES - MASTER HUB", text_color="#00e5ff", font=("Orbitron", 24, "bold"))
+            self.label.pack(pady=20)
+
+            self.textbox = ctk.CTkTextbox(self, width=850, height=650, fg_color="#050505", border_color="#00e5ff", border_width=2, text_color="#00e5ff", font=("Consolas", 14))
+            self.textbox.pack(pady=10)
+
+            self.pc_entry = ctk.CTkEntry(self, placeholder_text="Buradan da yazabilirsiniz Mikail efendim...", width=800, height=45, border_color="#00e5ff")
+            self.pc_entry.pack(pady=10)
+            self.pc_entry.bind("<Return>", lambda e: self.pc_islem())
+
+            threading.Thread(target=self.run_flask, daemon=True).start()
+
+        def yazdir(self, mesaj):
+            self.textbox.insert("end", f"\n[JARVIS]: {mesaj}\n")
+            self.textbox.see("end")
+
+        def pc_islem(self):
+            komut = self.pc_entry.get()
+            self.pc_entry.delete(0, 'end')
+            self.textbox.insert("end", f"\n>>> PC TALİMAT: {komut}\n")
+            threading.Thread(target=ai_islem_logic, args=(komut, self.yazdir), daemon=True).start()
+
+        def run_flask(self):
+            run_server()
+
+# --- FLASK SUNUCU AYARLARI ---
 @app.route('/')
 def mobil():
     return """
-    <html><head>
-    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-    <title>JARVIS CLOUD - MIKAIL</title>
+    <html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'>
     <style>
-        body { background: #000; color: #00e5ff; font-family: 'Consolas', monospace; padding: 10px; text-align: center; }
-        .header { font-size: 20px; text-shadow: 0 0 10px #00e5ff; margin-bottom: 20px; }
-        .chat-box { background: #0a0a0a; border: 2px solid #00e5ff; padding: 15px; border-radius: 10px; height: 60vh; overflow-y: auto; font-size: 16px; margin-bottom: 10px; text-align: left; white-space: pre-wrap; }
-        input { width: 100%; padding: 15px; background: #111; border: 1px solid #00e5ff; color: #fff; border-radius: 10px; box-sizing: border-box; outline: none; }
-        button { width: 100%; padding: 15px; background: #00e5ff; color: #000; border: none; font-weight: bold; margin-top: 10px; border-radius: 10px; cursor: pointer; }
-    </style>
-    </head><body>
-        <div class="header">STARK INDUSTRIES - CLOUD HUB v73</div>
+        body { background: #000; color: #00e5ff; font-family: monospace; padding: 10px; }
+        .chat-box { background: #0a0a0a; border: 2px solid #00e5ff; padding: 15px; border-radius: 10px; height: 65vh; overflow-y: scroll; font-size: 16px; margin-bottom: 10px; white-space: pre-wrap; }
+        input { width: 100%; padding: 15px; background: #111; border: 1px solid #00e5ff; color: #fff; border-radius: 10px; box-sizing: border-box; }
+        button { width: 100%; padding: 15px; background: #00e5ff; color: #000; border: none; font-weight: bold; margin-top: 10px; border-radius: 10px; }
+    </style></head><body>
         <div id='display' class='chat-box'>Sistem Bekleniyor...</div>
-        <input type='text' id='cmd' placeholder='Emriniz, Mikail?' onkeypress="if(event.keyCode==13) send()">
+        <input type='text' id='cmd' placeholder='Emriniz?'>
         <button onclick="send()">GÖNDER</button>
         <script>
             function send(){
                 let v = document.getElementById('cmd').value;
-                if(!v) return;
                 fetch('/c?k=' + encodeURIComponent(v));
                 document.getElementById('cmd').value = '';
             }
@@ -56,22 +107,20 @@ def mobil():
 @app.route('/c')
 def cmd():
     k = request.args.get('k')
-    def ai_islem(komut):
-        global chat_history
-        chat_history.append(f"> Mikail: {komut}")
-        try:
-            res = model.generate_content(f"Sen Jarvis'sin. Mikail'e cevap ver. Soru: {komut}")
-            chat_history.append(f"JARVIS: {res.text}")
-        except Exception as e:
-            chat_history.append(f"JARVIS HATA: {str(e)}")
-    
-    threading.Thread(target=ai_islem, args=(k,)).start()
+    threading.Thread(target=ai_islem_logic, args=(k,)).start()
     return "OK"
 
 @app.route('/get_history')
 def get_history():
     return jsonify({"history": chat_history})
 
-if __name__ == "__main__":
+def run_server():
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
+
+# --- ANA ÇALIŞTIRMA ---
+if __name__ == "__main__":
+    if IS_CLOUD:
+        run_server() # Bulutta sadece sunucuyu aç
+    else:
+        JarvisHybridSync().mainloop() # PC'de hem ekranı hem sunucuyu aç
