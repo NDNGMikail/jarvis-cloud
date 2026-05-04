@@ -12,15 +12,14 @@ def baslat():
     app.geometry("400x240")
     app.title("Jarvis Cloud")
 
-    # Arayüz elemanları
-    label = ctk.CTkLabel(app, text="Jarvis Bulut Sistemine Hoş Geldin, Fernando!", font=("Arial", 16))
+    # Arayüz elemanları - İsmin burada güncellendi Mikail!
+    label = ctk.CTkLabel(app, text="Jarvis Bulut Sistemine Hoş Geldin, Mikail!", font=("Arial", 16))
     label.pack(pady=20)
 
     btn = ctk.CTkButton(app, text="Sistemi Kontrol Et", command=lambda: print("Sistem Aktif!"))
     btn.pack(pady=10)
 
     print("Jarvis başarıyla başlatıldı...")
-    # Not: Render bir web hizmeti beklediği için sonsuz döngüde kalmalıdır
     app.mainloop()
 
 if __name__ == "__main__":
